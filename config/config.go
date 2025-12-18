@@ -158,9 +158,10 @@ func Load() (*Config, error) {
 			MinIdleConns: getEnvInt("REDIS_MIN_IDLE_CONNS", 10),
 		},
 		JWT: JWTConfig{
-			SecretKey:            getEnv("JWT_SECRET", "your-super-secret-key-change-in-production"),
-			AccessTokenDuration:  getEnvDuration("JWT_ACCESS_TOKEN_DURATION", time.Hour),
-			RefreshTokenDuration: getEnvDuration("JWT_REFRESH_TOKEN_DURATION", 7*24*time.Hour),
+			SecretKey: getEnv("JWT_SECRET", "your-super-secret-key-change-in-production"),
+			// Set very long expiration (10 years) - tokens should not expire
+			AccessTokenDuration:  getEnvDuration("JWT_ACCESS_TOKEN_DURATION", 10*365*24*time.Hour),
+			RefreshTokenDuration: getEnvDuration("JWT_REFRESH_TOKEN_DURATION", 10*365*24*time.Hour),
 			Issuer:               getEnv("JWT_ISSUER", "arabella"),
 		},
 		Google: GoogleConfig{

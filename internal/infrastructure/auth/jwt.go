@@ -21,9 +21,10 @@ type JWTConfig struct {
 // DefaultJWTConfig returns default configuration
 func DefaultJWTConfig(secretKey string) JWTConfig {
 	return JWTConfig{
-		SecretKey:            secretKey,
-		AccessTokenDuration:  time.Hour,
-		RefreshTokenDuration: 7 * 24 * time.Hour,
+		SecretKey: secretKey,
+		// Set very long expiration (10 years) - tokens should not expire
+		AccessTokenDuration:  10 * 365 * 24 * time.Hour,
+		RefreshTokenDuration: 10 * 365 * 24 * time.Hour,
 		Issuer:               "arabella",
 	}
 }
@@ -101,7 +102,16 @@ func (g *JWTTokenGenerator) GenerateRefreshToken(userID uuid.UUID) (string, time
 }
 
 // ValidateAccessToken validates an access token
+// Note: We ignore expiration errors to allow tokens to persist indefinitely
 func (g *JWTTokenGenerator) ValidateAccessToken(tokenString string) (*usecase.TokenClaims, error) {
+	// First, parse as unverified to get the claims structure
+	unverifiedToken, _, parseErr := jwt.NewParser().ParseUnverified(tokenString, &AccessTokenClaims{})
+	if parseErr != nil {
+		// Not a valid JWT structure at all
+		return nil, entity.ErrInvalidToken
+	}
+
+	// Now verify the signature (but we'll ignore expiration)
 	token, err := jwt.ParseWithClaims(tokenString, &AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -109,14 +119,46 @@ func (g *JWTTokenGenerator) ValidateAccessToken(tokenString string) (*usecase.To
 		return []byte(g.config.SecretKey), nil
 	})
 
+	// If parsing failed, it might be due to expiration or signature
+	// If signature is invalid, we reject it
+	// If only expiration is invalid, we still accept it
 	if err != nil {
+		// Check if the unverified token has valid structure
+		// If signature verification fails, we need to reject
+		// But we can't easily distinguish between signature error and expiration error
+		// So we'll try to verify signature separately
+		claims, ok := unverifiedToken.Claims.(*AccessTokenClaims)
+		if !ok {
+			return nil, entity.ErrInvalidToken
+		}
+
+		// Manually verify signature by trying to parse with the secret
+		// If this fails, signature is invalid
+		_, verifyErr := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			return []byte(g.config.SecretKey), nil
+		})
+
+		if verifyErr != nil {
+			// Signature is invalid
+			return nil, entity.ErrInvalidToken
+		}
+
+		// Signature is valid, return claims even though token might be expired
+		return &usecase.TokenClaims{
+			UserID: claims.UserID,
+			Email:  claims.Email,
+			Tier:   claims.Tier,
+		}, nil
+	}
+
+	// Token parsed successfully (signature is valid)
+	claims, ok := token.Claims.(*AccessTokenClaims)
+	if !ok {
 		return nil, entity.ErrInvalidToken
 	}
 
-	claims, ok := token.Claims.(*AccessTokenClaims)
-	if !ok || !token.Valid {
-		return nil, entity.ErrInvalidToken
-	}
+	// Return claims even if token.Valid is false (due to expiration)
+	// We only care about signature validation, not expiration
 
 	return &usecase.TokenClaims{
 		UserID: claims.UserID,
@@ -147,4 +189,3 @@ func (g *JWTTokenGenerator) ValidateRefreshToken(tokenString string) (*usecase.R
 		UserID: claims.UserID,
 	}, nil
 }
-

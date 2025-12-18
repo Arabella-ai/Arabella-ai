@@ -279,21 +279,63 @@ func (p *WanAIProvider) GenerateVideo(ctx context.Context, req service.Generatio
 
 	bodyBytes, _ := io.ReadAll(resp.Body)
 
-	if resp.StatusCode != http.StatusOK {
+	// Try to parse response even if status code is not OK
+	var dashScopeResp DashScopeGenerateResponse
+	if err := json.Unmarshal(bodyBytes, &dashScopeResp); err != nil {
+		// If we can't parse JSON, return generic error
+		if resp.StatusCode != http.StatusOK {
+			p.logger.Error("DashScope API error (unparseable response)",
+				zap.Int("status", resp.StatusCode),
+				zap.String("body", string(bodyBytes)),
+			)
+			return nil, fmt.Errorf("DashScope API error: %d - %s", resp.StatusCode, string(bodyBytes))
+		}
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Check for error codes first (even if status is 200, DashScope can return errors in the response)
+	if dashScopeResp.Code != "" && dashScopeResp.Code != "Success" {
+		// Handle specific error codes with user-friendly messages
+		var errorMsg string
+		switch dashScopeResp.Code {
+		case "DatalnspectionFailed":
+			// Extract the user-friendly message from DashScope response
+			if dashScopeResp.Message != "" {
+				// Check if message contains "inappropriate content" or similar
+				if strings.Contains(strings.ToLower(dashScopeResp.Message), "inappropriate") ||
+					strings.Contains(strings.ToLower(dashScopeResp.Message), "content") {
+					errorMsg = "Input data may contain inappropriate content. Please modify your prompt and try again."
+				} else {
+					errorMsg = dashScopeResp.Message
+				}
+			} else {
+				errorMsg = "Input data may contain inappropriate content. Please modify your prompt and try again."
+			}
+		default:
+			// For other error codes, use the message from DashScope or a generic message
+			if dashScopeResp.Message != "" {
+				errorMsg = dashScopeResp.Message
+			} else {
+				errorMsg = fmt.Sprintf("DashScope error: %s", dashScopeResp.Code)
+			}
+		}
+
 		p.logger.Error("DashScope API error",
+			zap.Int("status", resp.StatusCode),
+			zap.String("code", dashScopeResp.Code),
+			zap.String("message", dashScopeResp.Message),
+			zap.String("body", string(bodyBytes)),
+		)
+		return nil, fmt.Errorf("DashScope error: %s - %s", dashScopeResp.Code, errorMsg)
+	}
+
+	// If status code is not OK but no error code in response, return generic error
+	if resp.StatusCode != http.StatusOK {
+		p.logger.Error("DashScope API error (no error code in response)",
 			zap.Int("status", resp.StatusCode),
 			zap.String("body", string(bodyBytes)),
 		)
 		return nil, fmt.Errorf("DashScope API error: %d - %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	var dashScopeResp DashScopeGenerateResponse
-	if err := json.Unmarshal(bodyBytes, &dashScopeResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	if dashScopeResp.Code != "" && dashScopeResp.Code != "Success" {
-		return nil, fmt.Errorf("DashScope error: %s - %s", dashScopeResp.Code, dashScopeResp.Message)
 	}
 
 	if dashScopeResp.Output.TaskID == "" {
@@ -369,13 +411,38 @@ func (p *WanAIProvider) GetProgress(ctx context.Context, providerJobID string) (
 
 	// Check for API-level errors first
 	if taskResp.Code != "" && taskResp.Code != "Success" {
+		// Handle specific error codes with user-friendly messages
+		var errorMsg string
+		switch taskResp.Code {
+		case "DatalnspectionFailed":
+			// Extract the user-friendly message from DashScope response
+			if taskResp.Message != "" {
+				// Check if message contains "inappropriate content" or similar
+				if strings.Contains(strings.ToLower(taskResp.Message), "inappropriate") ||
+					strings.Contains(strings.ToLower(taskResp.Message), "content") {
+					errorMsg = "Input data may contain inappropriate content. Please modify your prompt and try again."
+				} else {
+					errorMsg = taskResp.Message
+				}
+			} else {
+				errorMsg = "Input data may contain inappropriate content. Please modify your prompt and try again."
+			}
+		default:
+			// For other error codes, use the message from DashScope or a generic message
+			if taskResp.Message != "" {
+				errorMsg = taskResp.Message
+			} else {
+				errorMsg = fmt.Sprintf("DashScope error: %s", taskResp.Code)
+			}
+		}
+
 		// Log the error for debugging
 		p.logger.Error("DashScope API error in task status",
 			zap.String("task_id", providerJobID),
 			zap.String("code", taskResp.Code),
 			zap.String("message", taskResp.Message),
 		)
-		return nil, fmt.Errorf("DashScope error: %s - %s", taskResp.Code, taskResp.Message)
+		return nil, fmt.Errorf("DashScope error: %s - %s", taskResp.Code, errorMsg)
 	}
 
 	// Map DashScope task status to our progress
@@ -426,41 +493,56 @@ func (p *WanAIProvider) GetProgress(ctx context.Context, providerJobID string) (
 		stage = "FAILED"
 		// Try to extract error message from multiple sources
 		errorMsg := taskResp.Message
+		errorCode := taskResp.Code
+
 		// Check output.message first (most common location for DashScope errors)
 		if errorMsg == "" && taskResp.Output.Message != "" {
 			errorMsg = taskResp.Output.Message
 		}
 		// Check output.code
-		if errorMsg == "" && taskResp.Output.Code != "" {
-			errorMsg = taskResp.Output.Code
+		if errorCode == "" && taskResp.Output.Code != "" {
+			errorCode = taskResp.Output.Code
 		}
 		// Check top-level code
-		if errorMsg == "" && taskResp.Code != "" {
-			errorMsg = taskResp.Code
+		if errorCode == "" && taskResp.Code != "" {
+			errorCode = taskResp.Code
 		}
 		// Fallback: Try to extract from full response JSON (for edge cases)
-		if errorMsg == "" {
+		if errorMsg == "" || errorCode == "" {
 			var fullResp map[string]interface{}
 			if err := json.Unmarshal(bodyBytes, &fullResp); err == nil {
 				if output, ok := fullResp["output"].(map[string]interface{}); ok {
 					if msg, ok := output["message"].(string); ok && msg != "" {
 						errorMsg = msg
-					} else if code, ok := output["code"].(string); ok && code != "" {
-						errorMsg = code
+					}
+					if code, ok := output["code"].(string); ok && code != "" {
+						errorCode = code
 					}
 				}
-				if errorMsg == "" {
+				if errorMsg == "" || errorCode == "" {
 					if msg, ok := fullResp["message"].(string); ok && msg != "" {
 						errorMsg = msg
-					} else if code, ok := fullResp["code"].(string); ok && code != "" {
-						errorMsg = code
+					}
+					if code, ok := fullResp["code"].(string); ok && code != "" {
+						errorCode = code
 					}
 				}
 			}
 		}
-		if errorMsg == "" {
+
+		// Handle specific error codes with user-friendly messages
+		if errorCode == "DatalnspectionFailed" {
+			// Check if message contains "inappropriate content" or similar
+			if errorMsg != "" && (strings.Contains(strings.ToLower(errorMsg), "inappropriate") ||
+				strings.Contains(strings.ToLower(errorMsg), "content")) {
+				errorMsg = "Input data may contain inappropriate content. Please modify your prompt and try again."
+			} else {
+				errorMsg = "Input data may contain inappropriate content. Please modify your prompt and try again."
+			}
+		} else if errorMsg == "" {
 			errorMsg = "Video generation failed (unknown reason)"
 		}
+
 		message = fmt.Sprintf("Video generation failed: %s", errorMsg)
 		p.logger.Error("DashScope task failed",
 			zap.String("task_id", providerJobID),
@@ -725,3 +807,4 @@ func (p *WanAIProvider) downloadAndCacheImage(ctx context.Context, imageURL stri
 	}
 	return fmt.Sprintf("/temp-images/%s", filename), nil
 }
+

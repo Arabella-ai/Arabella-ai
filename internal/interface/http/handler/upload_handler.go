@@ -176,3 +176,5 @@ func (h *UploadHandler) UploadImage(c *gin.Context) {
 		"uploaded_at": time.Now().UTC().Format(time.RFC3339),
 	})
 }
+
+

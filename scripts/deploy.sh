@@ -54,3 +54,5 @@ ps aux | grep arabella-api | grep -v grep | head -1
 
 echo ""
 echo "✅ Deployment complete!"
+
+
