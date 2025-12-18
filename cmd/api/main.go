@@ -335,14 +335,14 @@ func setupRouter(
 	// Static file serving for cached temp images (for DashScope)
 	router.Static("/temp-images", "./static/temp-images")
 
-	// Static file serving for uploaded images
-	// Serve under /api/v1/uploads so Nginx can proxy it correctly
-	router.Static("/api/v1/uploads", "./static/uploads")
-	// Also serve at root level for direct backend access
+	// Static file serving for uploaded images (at root level for direct backend access)
 	router.Static("/uploads", "./static/uploads")
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")
+	{
+		// Static file serving for uploaded images under /api/v1/uploads (for Nginx proxy)
+		v1.Static("/uploads", "./static/uploads")
 	{
 		// Image proxy endpoint (for external images that DashScope can't access)
 		// Also used by frontend for nanobanana.uz images
