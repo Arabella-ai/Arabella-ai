@@ -165,7 +165,9 @@ func (h *UploadHandler) UploadImage(c *gin.Context) {
 	// Remove trailing slash
 	baseURL = strings.TrimSuffix(baseURL, "/")
 
-	imageURL := fmt.Sprintf("%s/uploads/%s", baseURL, filename)
+	// Use /api/v1/uploads so it works through Nginx proxy
+	// Nginx proxies /api/* to backend, so /api/v1/uploads will work
+	imageURL := fmt.Sprintf("%s/api/v1/uploads/%s", baseURL, filename)
 
 	c.JSON(http.StatusOK, gin.H{
 		"url":         imageURL,

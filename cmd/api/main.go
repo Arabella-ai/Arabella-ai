@@ -336,6 +336,9 @@ func setupRouter(
 	router.Static("/temp-images", "./static/temp-images")
 
 	// Static file serving for uploaded images
+	// Serve under /api/v1/uploads so Nginx can proxy it correctly
+	router.Static("/api/v1/uploads", "./static/uploads")
+	// Also serve at root level for direct backend access
 	router.Static("/uploads", "./static/uploads")
 
 	// API v1 routes
