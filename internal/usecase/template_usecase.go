@@ -198,8 +198,39 @@ func (uc *TemplateUseCase) ValidateTemplateAccess(ctx context.Context, templateI
 	return template, nil
 }
 
+// CreateTemplate creates a new template
+func (uc *TemplateUseCase) CreateTemplate(ctx context.Context, template *entity.Template) error {
+	if template.Name == "" {
+		return entity.ErrInvalidInput
+	}
+	if template.Category == "" {
+		return entity.ErrInvalidInput
+	}
+	if template.Description == "" {
+		return entity.ErrInvalidInput
+	}
+	if template.BasePrompt == "" {
+		return entity.ErrInvalidInput
+	}
+	return uc.templateRepo.Create(ctx, template)
+}
+
+// UpdateTemplate updates an existing template
+func (uc *TemplateUseCase) UpdateTemplate(ctx context.Context, template *entity.Template) error {
+	// Verify template exists
+	_, err := uc.templateRepo.GetByID(ctx, template.ID)
+	if err != nil {
+		return err
+	}
+	return uc.templateRepo.Update(ctx, template)
+}
+
+// DeleteTemplate deletes a template (soft delete)
+func (uc *TemplateUseCase) DeleteTemplate(ctx context.Context, id uuid.UUID) error {
+	return uc.templateRepo.Delete(ctx, id)
+}
+
 // Helper function
 func boolPtr(b bool) *bool {
 	return &b
 }
-

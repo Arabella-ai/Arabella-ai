@@ -183,3 +183,29 @@ func (uc *AuthUseCase) generateTokens(user *entity.User) (*AuthTokens, error) {
 	}, nil
 }
 
+// AuthenticateAsTestUser creates or gets a test user without Google OAuth
+// This is for development/demo purposes
+func (uc *AuthUseCase) AuthenticateAsTestUser(ctx context.Context, email, name string) (*entity.User, *AuthTokens, error) {
+	// Try to find existing user by email
+	user, err := uc.userRepo.GetByEmail(ctx, email)
+	if err != nil && err != entity.ErrUserNotFound {
+		return nil, nil, err
+	}
+
+	// Create new user if not found
+	if user == nil {
+		user = entity.NewUser(email, name)
+		if err := uc.userRepo.Create(ctx, user); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	// Generate tokens
+	tokens, err := uc.generateTokens(user)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return user, tokens, nil
+}
+

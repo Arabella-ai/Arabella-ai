@@ -8,33 +8,34 @@ import (
 
 // GenerationRequest represents a video generation request to an AI provider
 type GenerationRequest struct {
-	JobID       string
-	Prompt      string
-	Params      entity.VideoParams
-	TemplateID  string
-	BasePrompt  string
-	UserTier    entity.UserTier
+	JobID        string
+	Prompt       string
+	Params       entity.VideoParams
+	TemplateID   string
+	BasePrompt   string
+	ThumbnailURL string // Template thumbnail URL for image-to-video
+	UserTier     entity.UserTier
 }
 
 // ProviderCapabilities describes what a provider can do
 type ProviderCapabilities struct {
-	Name              string
-	MaxDuration       int                       // Maximum video duration in seconds
-	MaxResolution     entity.VideoResolution
-	SupportedRatios   []entity.AspectRatio
-	EstimatedTime     int                       // Estimated time per second of video
-	QualityTier       string                    // budget, standard, premium
-	SupportsStyles    bool
-	CostPerSecond     float64
+	Name            string
+	MaxDuration     int // Maximum video duration in seconds
+	MaxResolution   entity.VideoResolution
+	SupportedRatios []entity.AspectRatio
+	EstimatedTime   int    // Estimated time per second of video
+	QualityTier     string // budget, standard, premium
+	SupportsStyles  bool
+	CostPerSecond   float64
 }
 
 // ProviderHealth represents the health status of a provider
 type ProviderHealth struct {
 	IsHealthy    bool
 	QueueDepth   int
-	ResponseTime int64  // in milliseconds
+	ResponseTime int64 // in milliseconds
 	ErrorRate    float64
-	LastChecked  int64  // unix timestamp
+	LastChecked  int64 // unix timestamp
 }
 
 // VideoProvider defines the contract for AI video generation providers
@@ -78,4 +79,3 @@ type ProviderSelectionRequest struct {
 	RequiredDuration   int
 	AspectRatio        entity.AspectRatio
 }
-

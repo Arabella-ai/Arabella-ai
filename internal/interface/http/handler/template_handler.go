@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/arabella/ai-studio-backend/internal/domain/entity"
 	"github.com/arabella/ai-studio-backend/internal/usecase"
@@ -179,6 +180,131 @@ func (h *TemplateHandler) GetCategories(c *gin.Context) {
 	})
 }
 
+// CreateTemplate creates a new template (admin only)
+// @Summary Create template
+// @Description Create a new video template (admin only)
+// @Tags templates
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param template body entity.Template true "Template data"
+// @Success 201 {object} entity.Template
+// @Failure 400 {object} ErrorResponse
+// @Router /admin/templates [post]
+func (h *TemplateHandler) CreateTemplate(c *gin.Context) {
+	var template entity.Template
+	if err := c.ShouldBindJSON(&template); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "Invalid request body",
+			Code:    "INVALID_REQUEST",
+			Details: err.Error(),
+		})
+		return
+	}
+
+	// Generate ID if not provided
+	if template.ID == uuid.Nil {
+		template.ID = uuid.New()
+	}
+
+	// Set timestamps
+	now := time.Now()
+	if template.CreatedAt.IsZero() {
+		template.CreatedAt = now
+	}
+	template.UpdatedAt = now
+
+	if err := h.templateUseCase.CreateTemplate(c.Request.Context(), &template); err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, template)
+}
+
+// UpdateTemplate updates an existing template (admin only)
+// @Summary Update template
+// @Description Update an existing video template (admin only)
+// @Tags templates
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path string true "Template ID" format(uuid)
+// @Param template body entity.Template true "Template data"
+// @Success 200 {object} entity.Template
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /admin/templates/{id} [put]
+func (h *TemplateHandler) UpdateTemplate(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := uuid.Parse(idParam)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error: "Invalid template ID",
+			Code:  "INVALID_ID",
+		})
+		return
+	}
+
+	var template entity.Template
+	if err := c.ShouldBindJSON(&template); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "Invalid request body",
+			Code:    "INVALID_REQUEST",
+			Details: err.Error(),
+		})
+		return
+	}
+
+	template.ID = id
+	template.UpdatedAt = time.Now()
+
+	if err := h.templateUseCase.UpdateTemplate(c.Request.Context(), &template); err != nil {
+		handleError(c, err)
+		return
+	}
+
+	// Fetch updated template
+	updated, err := h.templateUseCase.GetTemplateByID(c.Request.Context(), id)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, updated)
+}
+
+// DeleteTemplate deletes a template (admin only)
+// @Summary Delete template
+// @Description Delete a video template (admin only, soft delete)
+// @Tags templates
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path string true "Template ID" format(uuid)
+// @Success 204 "No Content"
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /admin/templates/{id} [delete]
+func (h *TemplateHandler) DeleteTemplate(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := uuid.Parse(idParam)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error: "Invalid template ID",
+			Code:  "INVALID_ID",
+		})
+		return
+	}
+
+	if err := h.templateUseCase.DeleteTemplate(c.Request.Context(), id); err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 // parsePositiveInt parses a string to a positive integer
 func parsePositiveInt(s string) (int, error) {
 	var i int
@@ -193,4 +319,3 @@ func parsePositiveInt(s string) (int, error) {
 	}
 	return i, nil
 }
-

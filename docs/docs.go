@@ -6,7 +6,7 @@ import "github.com/swaggo/swag"
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0.0",
-	Host:             "localhost:8080",
+	Host:             "api.arabella.uz",
 	BasePath:         "/api/v1",
 	Schemes:          []string{"http", "https"},
 	Title:            "Arabella API",
@@ -349,25 +349,35 @@ const docTemplate = `{
         },
         "VideoGenerationResponse": {
             "type": "object",
+            "description": "Response after starting a video generation job",
             "properties": {
-                "job_id": {"type": "string", "format": "uuid"},
-                "status": {"type": "string"},
-                "estimated_time": {"type": "integer"},
-                "queue_position": {"type": "integer"}
+                "job_id": {"type": "string", "format": "uuid", "example": "550e8400-e29b-41d4-a716-446655440000"},
+                "status": {"type": "string", "enum": ["pending", "processing", "diffusing", "uploading", "completed", "failed", "cancelled"], "example": "pending"},
+                "estimated_time": {"type": "integer", "description": "Estimated time in seconds", "example": 90},
+                "queue_position": {"type": "integer", "description": "Position in the generation queue", "example": 0}
             }
         },
         "VideoJob": {
             "type": "object",
+            "description": "Video generation job with status, progress, and result URLs",
             "properties": {
-                "id": {"type": "string", "format": "uuid"},
-                "user_id": {"type": "string", "format": "uuid"},
-                "template_id": {"type": "string", "format": "uuid"},
-                "prompt": {"type": "string"},
-                "status": {"type": "string", "enum": ["pending", "processing", "diffusing", "uploading", "completed", "failed"]},
-                "progress": {"type": "integer"},
-                "video_url": {"type": "string"},
-                "thumbnail_url": {"type": "string"},
-                "created_at": {"type": "string", "format": "date-time"}
+                "id": {"type": "string", "format": "uuid", "example": "550e8400-e29b-41d4-a716-446655440000"},
+                "user_id": {"type": "string", "format": "uuid", "example": "550e8400-e29b-41d4-a716-446655440000"},
+                "template_id": {"type": "string", "format": "uuid", "example": "550e8400-e29b-41d4-a716-446655440000"},
+                "prompt": {"type": "string", "example": "A beautiful sunset over mountains"},
+                "params": {"$ref": "#/definitions/VideoParams"},
+                "status": {"type": "string", "enum": ["pending", "processing", "diffusing", "uploading", "completed", "failed", "cancelled"], "example": "completed"},
+                "progress": {"type": "integer", "minimum": 0, "maximum": 100, "example": 100},
+                "provider": {"type": "string", "enum": ["gemini_veo", "openai_sora", "runway", "pika_labs", "mock"], "example": "gemini_veo"},
+                "provider_job_id": {"type": "string", "example": "gemini-job-123"},
+                "video_url": {"type": "string", "example": "https://storage.googleapis.com/gemini-videos/abc123.mp4"},
+                "thumbnail_url": {"type": "string", "example": "https://cdn.arabella.app/thumbnails/abc123.jpg"},
+                "duration_seconds": {"type": "integer", "example": 15},
+                "credits_charged": {"type": "integer", "example": 2},
+                "error_message": {"type": "string", "example": "Generation failed"},
+                "created_at": {"type": "string", "format": "date-time", "example": "2025-12-13T16:00:00Z"},
+                "started_at": {"type": "string", "format": "date-time", "example": "2025-12-13T16:00:05Z"},
+                "completed_at": {"type": "string", "format": "date-time", "example": "2025-12-13T16:02:00Z"}
             }
         },
         "UserProfileResponse": {

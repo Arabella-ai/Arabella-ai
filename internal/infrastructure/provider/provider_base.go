@@ -67,9 +67,9 @@ func (r *ProviderRegistry) GetAll() []service.VideoProvider {
 
 // ProviderSelectorImpl implements the ProviderSelector interface
 type ProviderSelectorImpl struct {
-	registry     *ProviderRegistry
-	healthCache  map[entity.AIProvider]*service.ProviderHealth
-	logger       *zap.Logger
+	registry    *ProviderRegistry
+	healthCache map[entity.AIProvider]*service.ProviderHealth
+	logger      *zap.Logger
 }
 
 // NewProviderSelector creates a new ProviderSelector
@@ -86,8 +86,22 @@ func (s *ProviderSelectorImpl) SelectProvider(ctx context.Context, req service.P
 	// If a preferred provider is specified, try to use it
 	if req.PreferredProvider != nil {
 		if provider, ok := s.registry.Get(*req.PreferredProvider); ok {
-			health, _ := provider.HealthCheck(ctx)
+			health, err := provider.HealthCheck(ctx)
+			// Log health check for debugging
+			s.logger.Info("Preferred provider health check",
+				zap.String("provider", string(*req.PreferredProvider)),
+				zap.Bool("healthy", health != nil && health.IsHealthy),
+				zap.Error(err),
+			)
+			// Allow provider even if health check fails (for testing)
+			// In production, you might want to require health check
 			if health != nil && health.IsHealthy {
+				return provider, nil
+			} else if health == nil || err != nil {
+				// If health check fails but provider exists, still use it (for testing)
+				s.logger.Warn("Preferred provider health check failed, but using it anyway",
+					zap.String("provider", string(*req.PreferredProvider)),
+				)
 				return provider, nil
 			}
 		}
@@ -105,11 +119,13 @@ func (s *ProviderSelectorImpl) SelectProvider(ctx context.Context, req service.P
 		caps := provider.GetCapabilities()
 
 		// Check tier requirements
-		if req.UserTier == entity.UserTierFree {
-			if caps.QualityTier == "premium" {
-				continue
-			}
-		}
+		// Allow free users to use premium providers (for testing)
+		// In production, you can re-enable this check if needed
+		// if req.UserTier == entity.UserTierFree {
+		// 	if caps.QualityTier == "premium" {
+		// 		continue
+		// 	}
+		// }
 
 		// Check resolution requirements
 		if !supportsResolution(caps.MaxResolution, req.RequiredResolution) {
@@ -121,10 +137,27 @@ func (s *ProviderSelectorImpl) SelectProvider(ctx context.Context, req service.P
 			continue
 		}
 
-		// Check health
+		// Check health (more lenient for testing)
 		health, err := provider.HealthCheck(ctx)
-		if err != nil || !health.IsHealthy {
-			continue
+		// Only skip if health check explicitly fails AND we have other options
+		// For testing, we'll allow providers even if health check has issues
+		if err != nil {
+			s.logger.Warn("Provider health check error, but allowing it",
+				zap.String("provider", string(provider.GetName())),
+				zap.Error(err),
+			)
+			// Continue to next provider only if we have other options
+		} else if health != nil && !health.IsHealthy {
+			s.logger.Warn("Provider unhealthy, but allowing it for testing",
+				zap.String("provider", string(provider.GetName())),
+			)
+			// For testing, allow unhealthy providers if it's the preferred one
+			if req.PreferredProvider != nil && provider.GetName() == *req.PreferredProvider {
+				// Allow preferred provider even if unhealthy
+			} else if len(providers) > 1 {
+				// Skip only if we have other providers
+				continue
+			}
 		}
 
 		eligible = append(eligible, provider)
@@ -188,6 +221,16 @@ func scoreProvider(provider service.VideoProvider, userTier entity.UserTier) int
 	caps := provider.GetCapabilities()
 	score := 0
 
+	// Prefer Wan AI (highest priority) - much higher than others
+	if provider.GetName() == entity.ProviderWanAI {
+		score += 1000 // Very high priority
+	}
+
+	// Penalize mock provider (lowest priority)
+	if provider.GetName() == entity.ProviderMock {
+		score -= 500 // Very low priority
+	}
+
 	// Higher quality = higher score for premium users
 	switch caps.QualityTier {
 	case "premium":
@@ -205,4 +248,3 @@ func scoreProvider(provider service.VideoProvider, userTier entity.UserTier) int
 
 	return score
 }
-

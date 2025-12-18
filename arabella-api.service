@@ -1,0 +1,34 @@
+[Unit]
+Description=Arabella AI Studio Backend API Service
+After=network.target postgresql.service redis.service
+Wants=postgresql.service redis.service
+
+[Service]
+Type=simple
+User=pro
+Group=pro
+WorkingDirectory=/var/www/arabella/backend
+EnvironmentFile=/var/www/arabella/backend/.env
+ExecStart=/var/www/arabella/backend/bin/api
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=arabella-api
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/arabella/backend
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=2G
+CPUQuota=200%
+
+[Install]
+WantedBy=multi-user.target
+
+

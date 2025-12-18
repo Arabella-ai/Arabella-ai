@@ -23,32 +23,34 @@ const (
 type AIProvider string
 
 const (
-	ProviderGeminiVEO AIProvider = "gemini_veo"
+	ProviderGeminiVEO  AIProvider = "gemini_veo"
 	ProviderOpenAISora AIProvider = "openai_sora"
 	ProviderRunway     AIProvider = "runway"
 	ProviderPikaLabs   AIProvider = "pika_labs"
+	ProviderWanAI      AIProvider = "wan_ai"
 	ProviderMock       AIProvider = "mock" // For development
 )
 
 // VideoJob represents a video generation job
+// @Description Video generation job with status, progress, and result URLs
 type VideoJob struct {
-	ID             uuid.UUID   `json:"id"`
-	UserID         uuid.UUID   `json:"user_id"`
-	TemplateID     uuid.UUID   `json:"template_id"`
-	Prompt         string      `json:"prompt"`
-	Params         VideoParams `json:"params"`
-	Status         JobStatus   `json:"status"`
-	Progress       int         `json:"progress"` // 0-100
-	Provider       AIProvider  `json:"provider"`
-	ProviderJobID  *string     `json:"provider_job_id,omitempty"`
-	VideoURL       *string     `json:"video_url,omitempty"`
-	ThumbnailURL   *string     `json:"thumbnail_url,omitempty"`
-	DurationSeconds int        `json:"duration_seconds,omitempty"`
-	CreditsCharged int         `json:"credits_charged"`
-	ErrorMessage   *string     `json:"error_message,omitempty"`
-	CreatedAt      time.Time   `json:"created_at"`
-	StartedAt      *time.Time  `json:"started_at,omitempty"`
-	CompletedAt    *time.Time  `json:"completed_at,omitempty"`
+	ID              uuid.UUID   `json:"id" example:"550e8400-e29b-41d4-a716-446655440000"`
+	UserID          uuid.UUID   `json:"user_id" example:"550e8400-e29b-41d4-a716-446655440000"`
+	TemplateID      uuid.UUID   `json:"template_id" example:"550e8400-e29b-41d4-a716-446655440000"`
+	Prompt          string      `json:"prompt" example:"A beautiful sunset over mountains"`
+	Params          VideoParams `json:"params"`
+	Status          JobStatus   `json:"status" example:"completed" enums:"pending,processing,diffusing,uploading,completed,failed,cancelled"`
+	Progress        int         `json:"progress" example:"100" minimum:"0" maximum:"100"` // 0-100
+	Provider        AIProvider  `json:"provider" example:"gemini_veo" enums:"gemini_veo,openai_sora,runway,pika_labs,wan_ai,mock"`
+	ProviderJobID   *string     `json:"provider_job_id,omitempty" example:"gemini-job-123"`
+	VideoURL        *string     `json:"video_url,omitempty" example:"https://storage.googleapis.com/gemini-videos/abc123.mp4"`
+	ThumbnailURL    *string     `json:"thumbnail_url,omitempty" example:"https://cdn.arabella.app/thumbnails/abc123.jpg"`
+	DurationSeconds int         `json:"duration_seconds,omitempty" example:"15"`
+	CreditsCharged  int         `json:"credits_charged" example:"2"`
+	ErrorMessage    *string     `json:"error_message,omitempty" example:"Generation failed"`
+	CreatedAt       time.Time   `json:"created_at" example:"2025-12-13T16:00:00Z"`
+	StartedAt       *time.Time  `json:"started_at,omitempty" example:"2025-12-13T16:00:05Z"`
+	CompletedAt     *time.Time  `json:"completed_at,omitempty" example:"2025-12-13T16:02:00Z"`
 }
 
 // NewVideoJob creates a new video generation job
@@ -137,4 +139,3 @@ type Progress struct {
 	Stage   string
 	Message string
 }
-

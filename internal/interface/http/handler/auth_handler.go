@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/arabella/ai-studio-backend/internal/domain/entity"
 	"github.com/arabella/ai-studio-backend/internal/usecase"
@@ -99,6 +101,57 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, tokens)
+}
+
+// TestLogin handles test/demo login without Google OAuth
+// @Summary Test login (skip Google auth)
+// @Description Create or get a test user for development/demo purposes
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body TestLoginRequest true "Test Login Request"
+// @Success 200 {object} GoogleAuthResponse
+// @Failure 400 {object} ErrorResponse
+// @Router /auth/test [post]
+func (h *AuthHandler) TestLogin(c *gin.Context) {
+	var req TestLoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "Invalid request body",
+			Code:    "INVALID_REQUEST",
+			Details: err.Error(),
+		})
+		return
+	}
+
+	// Use email as identifier, or generate a test email
+	email := req.Email
+	if email == "" {
+		email = fmt.Sprintf("test-%d@arabella.test", time.Now().Unix())
+	}
+
+	name := req.Name
+	if name == "" {
+		name = "Test User"
+	}
+
+	// Create or get test user
+	user, tokens, err := h.authUseCase.AuthenticateAsTestUser(c.Request.Context(), email, name)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, GoogleAuthResponse{
+		User:   user,
+		Tokens: tokens,
+	})
+}
+
+// TestLoginRequest represents the test login request body
+type TestLoginRequest struct {
+	Email string `json:"email,omitempty"`
+	Name  string `json:"name,omitempty"`
 }
 
 // Logout handles user logout

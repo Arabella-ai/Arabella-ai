@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/arabella/ai-studio-backend/internal/domain/entity"
 	"github.com/arabella/ai-studio-backend/internal/domain/repository"
@@ -12,17 +11,18 @@ import (
 
 // VideoGenerationRequest represents a video generation request
 type VideoGenerationRequest struct {
-	TemplateID uuid.UUID          `json:"template_id" binding:"required"`
-	Prompt     string             `json:"prompt" binding:"required,min=10,max=2000"`
+	TemplateID uuid.UUID           `json:"template_id" binding:"required"`
+	Prompt     string              `json:"prompt" binding:"required,min=10,max=2000"`
 	Params     *entity.VideoParams `json:"params,omitempty"`
 }
 
 // VideoGenerationResponse represents the response after initiating generation
+// @Description Response after starting a video generation job
 type VideoGenerationResponse struct {
-	JobID         uuid.UUID   `json:"job_id"`
-	Status        string      `json:"status"`
-	EstimatedTime int         `json:"estimated_time"` // in seconds
-	QueuePosition int         `json:"queue_position"`
+	JobID         uuid.UUID `json:"job_id" example:"550e8400-e29b-41d4-a716-446655440000"`
+	Status        string    `json:"status" example:"pending" enums:"pending,processing,diffusing,uploading,completed,failed,cancelled"`
+	EstimatedTime int       `json:"estimated_time" example:"90"` // in seconds
+	QueuePosition int       `json:"queue_position" example:"0"`
 }
 
 // VideoJobListRequest represents a request to list video jobs
@@ -133,8 +133,8 @@ func (uc *VideoUseCase) GenerateVideo(ctx context.Context, userID uuid.UUID, req
 		}
 	}
 
-	// Combine base prompt with user prompt
-	fullPrompt := fmt.Sprintf("%s. %s", template.BasePrompt, req.Prompt)
+	// Use only the user's prompt (ignore template base prompt)
+	fullPrompt := req.Prompt
 
 	// Create the job
 	job := entity.NewVideoJob(userID, template.ID, fullPrompt, params, template.CreditCost)
@@ -298,4 +298,3 @@ func (uc *VideoUseCase) GetVideo(ctx context.Context, userID, jobID uuid.UUID) (
 
 	return job, nil
 }
-

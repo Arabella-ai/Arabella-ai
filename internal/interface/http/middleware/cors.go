@@ -65,20 +65,37 @@ func CORS(config CORSConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
 
+		// Same-origin requests don't send Origin header - always allow them
+		if origin == "" {
+			c.Next()
+			return
+		}
+
 		// Check if origin is allowed
 		allowed := false
+		allowedOriginValue := ""
+		
 		for _, allowedOrigin := range config.AllowOrigins {
-			if allowedOrigin == "*" || allowedOrigin == origin {
+			if allowedOrigin == "*" {
+				// Wildcard: if credentials enabled, can't use * - skip it
+				// If credentials not enabled, allow any origin
+				if !config.AllowCredentials {
+					allowed = true
+					allowedOriginValue = origin
+					break
+				}
+			} else if allowedOrigin == origin {
 				allowed = true
+				allowedOriginValue = origin
 				break
 			}
 		}
 
-		if allowed {
-			c.Header("Access-Control-Allow-Origin", origin)
+		if allowed && allowedOriginValue != "" {
+			c.Header("Access-Control-Allow-Origin", allowedOriginValue)
 		}
 
-		if config.AllowCredentials {
+		if config.AllowCredentials && allowed {
 			c.Header("Access-Control-Allow-Credentials", "true")
 		}
 

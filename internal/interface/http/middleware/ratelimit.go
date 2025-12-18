@@ -27,9 +27,9 @@ type RateLimitConfig struct {
 // DefaultAPIRateLimitConfig returns default API rate limit config
 func DefaultAPIRateLimitConfig() RateLimitConfig {
 	return RateLimitConfig{
-		FreeLimit:      100,    // 100 requests per minute for free users
-		PremiumLimit:   500,    // 500 requests per minute for premium
-		ProLimit:       1000,   // 1000 requests per minute for pro
+		FreeLimit:      100,  // 100 requests per minute for free users
+		PremiumLimit:   500,  // 500 requests per minute for premium
+		ProLimit:       1000, // 1000 requests per minute for pro
 		WindowDuration: time.Minute,
 	}
 }
@@ -37,9 +37,9 @@ func DefaultAPIRateLimitConfig() RateLimitConfig {
 // DefaultGenerationRateLimitConfig returns default generation rate limit config
 func DefaultGenerationRateLimitConfig() RateLimitConfig {
 	return RateLimitConfig{
-		FreeLimit:      5,      // 5 generations per day for free users
-		PremiumLimit:   100,    // 100 generations per day for premium
-		ProLimit:       -1,     // Unlimited for pro
+		FreeLimit:      -1, // Unlimited for free users (for testing)
+		PremiumLimit:   -1, // Unlimited for premium
+		ProLimit:       -1, // Unlimited for pro
 		WindowDuration: 24 * time.Hour,
 	}
 }
@@ -93,6 +93,11 @@ func (m *RateLimitMiddleware) LimitByUser(config RateLimitConfig) gin.HandlerFun
 		userID, exists := c.Get(UserIDKey)
 		if !exists {
 			// Fall back to IP-based limiting for unauthenticated users
+			if config.FreeLimit < 0 {
+				// Unlimited
+				c.Next()
+				return
+			}
 			key := fmt.Sprintf("ratelimit:ip:%s", c.ClientIP())
 			m.applyLimit(c, key, config.FreeLimit, config.WindowDuration)
 			return
@@ -111,12 +116,14 @@ func (m *RateLimitMiddleware) LimitByUser(config RateLimitConfig) gin.HandlerFun
 		case entity.UserTierPremium:
 			limit = config.PremiumLimit
 		case entity.UserTierPro:
-			if config.ProLimit < 0 {
-				// Unlimited
-				c.Next()
-				return
-			}
 			limit = config.ProLimit
+		}
+
+		// Check if unlimited (-1)
+		if limit < 0 {
+			// Unlimited - skip rate limiting
+			c.Next()
+			return
 		}
 
 		key := fmt.Sprintf("ratelimit:user:%s", userID.(uuid.UUID).String())
@@ -154,4 +161,3 @@ func (m *RateLimitMiddleware) applyLimit(c *gin.Context, key string, limit int, 
 
 	c.Next()
 }
-

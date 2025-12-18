@@ -46,6 +46,7 @@ type ServerConfig struct {
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	ShutdownTimeout time.Duration
+	BaseURL         string // Public base URL for the API (e.g., https://api.arabella.uz)
 }
 
 // DatabaseConfig holds database configuration
@@ -88,18 +89,21 @@ type GoogleConfig struct {
 
 // AIConfig holds AI provider configuration
 type AIConfig struct {
-	GeminiAPIKey  string
-	OpenAIAPIKey  string
-	RunwayAPIKey  string
-	PikaAPIKey    string
+	GeminiAPIKey    string
+	OpenAIAPIKey    string
+	RunwayAPIKey    string
+	PikaAPIKey      string
+	WanAIAPIKey     string
+	WanAIVersion    string
+	WanAIBaseURL    string
 	UseMockProvider bool
 }
 
 // StorageConfig holds storage configuration
 type StorageConfig struct {
-	S3Bucket    string
-	S3Region    string
-	CDNBaseURL  string
+	S3Bucket     string
+	S3Region     string
+	CDNBaseURL   string
 	AWSAccessKey string
 	AWSSecretKey string
 }
@@ -131,6 +135,7 @@ func Load() (*Config, error) {
 			ReadTimeout:     getEnvDuration("SERVER_READ_TIMEOUT", 30*time.Second),
 			WriteTimeout:    getEnvDuration("SERVER_WRITE_TIMEOUT", 30*time.Second),
 			ShutdownTimeout: getEnvDuration("SERVER_SHUTDOWN_TIMEOUT", 10*time.Second),
+			BaseURL:         getEnv("API_BASE_URL", "https://api.arabella.uz"),
 		},
 		Database: DatabaseConfig{
 			Host:            getEnv("DB_HOST", "localhost"),
@@ -167,12 +172,15 @@ func Load() (*Config, error) {
 			OpenAIAPIKey:    getEnv("OPENAI_API_KEY", ""),
 			RunwayAPIKey:    getEnv("RUNWAY_API_KEY", ""),
 			PikaAPIKey:      getEnv("PIKA_API_KEY", ""),
+			WanAIAPIKey:     getEnv("WANAI_API_KEY", ""),
+			WanAIVersion:    getEnv("WANAI_VERSION", "2.5"),
+			WanAIBaseURL:    getEnv("WANAI_BASE_URL", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"),
 			UseMockProvider: getEnvBool("USE_MOCK_PROVIDER", true),
 		},
 		Storage: StorageConfig{
-			S3Bucket:    getEnv("S3_BUCKET", "arabella-videos"),
-			S3Region:    getEnv("S3_REGION", "us-east-1"),
-			CDNBaseURL:  getEnv("CDN_BASE_URL", "https://cdn.arabella.app"),
+			S3Bucket:     getEnv("S3_BUCKET", "arabella-videos"),
+			S3Region:     getEnv("S3_REGION", "us-east-1"),
+			CDNBaseURL:   getEnv("CDN_BASE_URL", "https://cdn.arabella.app"),
 			AWSAccessKey: getEnv("AWS_ACCESS_KEY_ID", ""),
 			AWSSecretKey: getEnv("AWS_SECRET_ACCESS_KEY", ""),
 		},
@@ -279,4 +287,3 @@ func getEnvSlice(key string, defaultValue []string) []string {
 	}
 	return defaultValue
 }
-

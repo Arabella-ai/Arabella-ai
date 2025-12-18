@@ -10,7 +10,7 @@ import (
 type TemplateCategory string
 
 const (
-	TemplateCategoryCyberpunk      TemplateCategory = "cyberpunk_intro"
+	TemplateCategoryCyberpunk       TemplateCategory = "cyberpunk_intro"
 	TemplateCategoryProductShowcase TemplateCategory = "product_showcase"
 	TemplateCategoryDailyVlog       TemplateCategory = "daily_vlog"
 	TemplateCategoryTechReview      TemplateCategory = "tech_review"
@@ -40,20 +40,22 @@ const (
 )
 
 // VideoParams contains configurable video generation parameters
+// VideoParams represents video generation parameters
+// @Description Parameters for video generation (duration, resolution, aspect ratio, etc.)
 type VideoParams struct {
-	Duration       int             `json:"duration"`        // Duration in seconds
-	Resolution     VideoResolution `json:"resolution"`      // Output resolution
-	AspectRatio    AspectRatio     `json:"aspect_ratio"`    // Aspect ratio
-	FPS            int             `json:"fps"`             // Frames per second
-	Style          string          `json:"style,omitempty"` // Visual style modifier
-	NegativePrompt string          `json:"negative_prompt,omitempty"`
+	Duration       int             `json:"duration" example:"15"`               // Duration in seconds
+	Resolution     VideoResolution `json:"resolution" example:"1080p"`          // Output resolution
+	AspectRatio    AspectRatio     `json:"aspect_ratio" example:"16:9"`         // Aspect ratio
+	FPS            int             `json:"fps" example:"30"`                    // Frames per second
+	Style          string          `json:"style,omitempty" example:"cinematic"` // Visual style modifier
+	NegativePrompt string          `json:"negative_prompt,omitempty" example:"blurry, low quality"`
 }
 
 // DefaultVideoParams returns default video parameters
 func DefaultVideoParams() VideoParams {
 	return VideoParams{
-		Duration:    15,
-		Resolution:  Resolution1080p,
+		Duration:    5,              // Changed from 15 to 5 seconds for faster generation
+		Resolution:  Resolution720p, // Changed from 1080p to 720p for faster generation
 		AspectRatio: AspectRatio16x9,
 		FPS:         30,
 	}
@@ -117,4 +119,3 @@ func (t *Template) IncrementUsage() {
 	t.UsageCount++
 	t.UpdatedAt = time.Now()
 }
-
