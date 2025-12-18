@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -79,6 +80,8 @@ type DashScopeOutput struct {
 	TaskStatus string `json:"task_status,omitempty"`
 	VideoURL   string `json:"video_url,omitempty"`
 	Video      string `json:"video,omitempty"`
+	Code       string `json:"code,omitempty"`       // Error code in output
+	Message    string `json:"message,omitempty"`    // Error message in output
 }
 
 // DashScopeUsage represents API usage information
@@ -142,34 +145,39 @@ func (p *WanAIProvider) GenerateVideo(ctx context.Context, req service.Generatio
 	// Get image URL from template thumbnail, or use default test image
 	imgURL := req.ThumbnailURL
 
-	// Handle image URL - download and cache nanobanana.uz images to avoid SSL issues
+	// Handle image URL - proxy ALL external images through our backend to avoid access issues
 	if imgURL != "" {
-		// Check if it's from nanobanana.uz (needs to be cached locally)
-		if strings.Contains(imgURL, "nanobanana.uz") {
-			// Convert HTTPS to HTTP for nanobanana.uz (SSL certificate issues)
-			if strings.HasPrefix(imgURL, "https://nanobanana.uz") {
-				imgURL = strings.Replace(imgURL, "https://nanobanana.uz", "http://nanobanana.uz", 1)
-			}
-
-			// Download and cache the image locally, then serve from static endpoint
-			cachedURL, err := p.downloadAndCacheImage(ctx, imgURL, req.TemplateID)
-			if err != nil {
-				p.logger.Warn("Failed to cache nanobanana.uz image, using default",
+		// Check if it's an external URL (not already proxied)
+		if strings.HasPrefix(imgURL, "http://") || strings.HasPrefix(imgURL, "https://") {
+			// Check if it's already a local/proxied URL
+			if !strings.Contains(imgURL, p.serverBaseURL) && !strings.HasPrefix(imgURL, "/") {
+				// External URL - download and cache it locally, then serve from static endpoint
+				// This ensures DashScope can access it
+				cachedURL, err := p.downloadAndCacheImage(ctx, imgURL, req.TemplateID)
+				if err != nil {
+					p.logger.Warn("Failed to cache external image, using default",
+						zap.String("template_id", req.TemplateID),
+						zap.String("thumbnail_url", imgURL),
+						zap.Error(err),
+					)
+					imgURL = "https://cdn.translate.alibaba.com/r/wanx-demo-1.png"
+				} else {
+					imgURL = cachedURL
+					p.logger.Info("Using cached external image",
+						zap.String("template_id", req.TemplateID),
+						zap.String("original_url", req.ThumbnailURL),
+						zap.String("cached_url", imgURL),
+					)
+				}
+			} else {
+				// Already proxied or local URL
+				p.logger.Info("Using template thumbnail for image-to-video",
 					zap.String("template_id", req.TemplateID),
 					zap.String("thumbnail_url", imgURL),
-					zap.Error(err),
-				)
-				imgURL = "https://cdn.translate.alibaba.com/r/wanx-demo-1.png"
-			} else {
-				imgURL = cachedURL
-				p.logger.Info("Using cached nanobanana.uz image",
-					zap.String("template_id", req.TemplateID),
-					zap.String("original_url", req.ThumbnailURL),
-					zap.String("cached_url", imgURL),
 				)
 			}
 		} else {
-			// Not from nanobanana.uz, use template thumbnail directly
+			// Relative URL, use as-is
 			p.logger.Info("Using template thumbnail for image-to-video",
 				zap.String("template_id", req.TemplateID),
 				zap.String("thumbnail_url", imgURL),
@@ -418,21 +426,33 @@ func (p *WanAIProvider) GetProgress(ctx context.Context, providerJobID string) (
 		stage = "FAILED"
 		// Try to extract error message from multiple sources
 		errorMsg := taskResp.Message
+		// Check output.message first (most common location for DashScope errors)
+		if errorMsg == "" && taskResp.Output.Message != "" {
+			errorMsg = taskResp.Output.Message
+		}
+		// Check output.code
+		if errorMsg == "" && taskResp.Output.Code != "" {
+			errorMsg = taskResp.Output.Code
+		}
+		// Check top-level code
 		if errorMsg == "" && taskResp.Code != "" {
 			errorMsg = taskResp.Code
 		}
+		// Fallback: Try to extract from full response JSON (for edge cases)
 		if errorMsg == "" {
-			// Try to extract from full response JSON
 			var fullResp map[string]interface{}
 			if err := json.Unmarshal(bodyBytes, &fullResp); err == nil {
-				if msg, ok := fullResp["message"].(string); ok && msg != "" {
-					errorMsg = msg
-				} else if code, ok := fullResp["code"].(string); ok && code != "" {
-					errorMsg = code
-				} else if output, ok := fullResp["output"].(map[string]interface{}); ok {
+				if output, ok := fullResp["output"].(map[string]interface{}); ok {
 					if msg, ok := output["message"].(string); ok && msg != "" {
 						errorMsg = msg
 					} else if code, ok := output["code"].(string); ok && code != "" {
+						errorMsg = code
+					}
+				}
+				if errorMsg == "" {
+					if msg, ok := fullResp["message"].(string); ok && msg != "" {
+						errorMsg = msg
+					} else if code, ok := fullResp["code"].(string); ok && code != "" {
 						errorMsg = code
 					}
 				}
@@ -613,28 +633,58 @@ func (p *WanAIProvider) downloadAndCacheImage(ctx context.Context, imageURL stri
 
 	// Check if already cached
 	if _, err := os.Stat(cachePath); err == nil {
-		// File exists, return cached URL (use HTTP to avoid SSL issues)
+		// File exists, return cached URL
+		// Use full URL with server base URL so DashScope can access it
 		if p.serverBaseURL != "" {
-			// Convert HTTPS to HTTP to avoid SSL certificate issues with DashScope
-			baseURL := strings.Replace(p.serverBaseURL, "https://", "http://", 1)
-			return fmt.Sprintf("%s/temp-images/%s", baseURL, filename), nil
+			// Use HTTPS if available, but DashScope should be able to access it
+			return fmt.Sprintf("%s/temp-images/%s", p.serverBaseURL, filename), nil
 		}
 		return fmt.Sprintf("/temp-images/%s", filename), nil
 	}
 
-	// Download the image
+	// Download the image with retry logic and better error handling
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 60 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // Bypass SSL for problematic domains
+		},
 	}
-	req, err := http.NewRequestWithContext(ctx, "GET", imageURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ArabellaBot/1.0)")
+	
+	// Try HTTPS first, fallback to HTTP if needed
+	var resp *http.Response
+	var err error
+	maxRetries := 3
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, "GET", imageURL, nil)
+		if err != nil {
+			return "", fmt.Errorf("failed to create request: %w", err)
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+		req.Header.Set("Accept", "image/*,*/*")
+		req.Header.Set("Referer", imageURL)
 
-	resp, err := client.Do(req)
+		resp, err = client.Do(req)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			break
+		}
+		
+		// If HTTPS failed and we haven't tried HTTP yet, try HTTP
+		if attempt == 0 && strings.HasPrefix(imageURL, "https://") {
+			imageURL = strings.Replace(imageURL, "https://", "http://", 1)
+			continue
+		}
+		
+		if resp != nil {
+			resp.Body.Close()
+		}
+		
+		if attempt < maxRetries-1 {
+			time.Sleep(time.Duration(attempt+1) * time.Second)
+		}
+	}
+	
 	if err != nil {
-		return "", fmt.Errorf("failed to download image: %w", err)
+		return "", fmt.Errorf("failed to download image after %d attempts: %w", maxRetries, err)
 	}
 	defer resp.Body.Close()
 
@@ -662,5 +712,3 @@ func (p *WanAIProvider) downloadAndCacheImage(ctx context.Context, imageURL stri
 	}
 	return fmt.Sprintf("/temp-images/%s", filename), nil
 }
-
-
