@@ -416,7 +416,28 @@ func (p *WanAIProvider) GetProgress(ctx context.Context, providerJobID string) (
 	case "FAILED", "failed", "ERROR", "error":
 		progress = 0
 		stage = "FAILED"
+		// Try to extract error message from multiple sources
 		errorMsg := taskResp.Message
+		if errorMsg == "" && taskResp.Code != "" {
+			errorMsg = taskResp.Code
+		}
+		if errorMsg == "" {
+			// Try to extract from full response JSON
+			var fullResp map[string]interface{}
+			if err := json.Unmarshal(bodyBytes, &fullResp); err == nil {
+				if msg, ok := fullResp["message"].(string); ok && msg != "" {
+					errorMsg = msg
+				} else if code, ok := fullResp["code"].(string); ok && code != "" {
+					errorMsg = code
+				} else if output, ok := fullResp["output"].(map[string]interface{}); ok {
+					if msg, ok := output["message"].(string); ok && msg != "" {
+						errorMsg = msg
+					} else if code, ok := output["code"].(string); ok && code != "" {
+						errorMsg = code
+					}
+				}
+			}
+		}
 		if errorMsg == "" {
 			errorMsg = "Video generation failed (unknown reason)"
 		}
@@ -425,6 +446,8 @@ func (p *WanAIProvider) GetProgress(ctx context.Context, providerJobID string) (
 			zap.String("task_id", providerJobID),
 			zap.String("error", errorMsg),
 			zap.String("code", taskResp.Code),
+			zap.String("message", taskResp.Message),
+			zap.String("full_response", string(bodyBytes)),
 		)
 	default:
 		progress = 30
