@@ -634,10 +634,11 @@ func (p *WanAIProvider) downloadAndCacheImage(ctx context.Context, imageURL stri
 	// Check if already cached
 	if _, err := os.Stat(cachePath); err == nil {
 		// File exists, return cached URL
-		// Use full URL with server base URL so DashScope can access it
+		// Use HTTP instead of HTTPS to avoid SSL certificate verification issues with DashScope
 		if p.serverBaseURL != "" {
-			// Use HTTPS if available, but DashScope should be able to access it
-			return fmt.Sprintf("%s/temp-images/%s", p.serverBaseURL, filename), nil
+			// Convert HTTPS to HTTP for DashScope compatibility
+			baseURL := strings.Replace(p.serverBaseURL, "https://", "http://", 1)
+			return fmt.Sprintf("%s/temp-images/%s", baseURL, filename), nil
 		}
 		return fmt.Sprintf("/temp-images/%s", filename), nil
 	}
@@ -704,9 +705,11 @@ func (p *WanAIProvider) downloadAndCacheImage(ctx context.Context, imageURL stri
 		return "", fmt.Errorf("failed to save image: %w", err)
 	}
 
-	// Return URL to cached image (use full HTTPS URL so DashScope can access it)
+	// Return URL to cached image (use HTTP to avoid SSL certificate verification issues with DashScope)
 	if p.serverBaseURL != "" {
-		return fmt.Sprintf("%s/temp-images/%s", p.serverBaseURL, filename), nil
+		// Convert HTTPS to HTTP for DashScope compatibility
+		baseURL := strings.Replace(p.serverBaseURL, "https://", "http://", 1)
+		return fmt.Sprintf("%s/temp-images/%s", baseURL, filename), nil
 	}
 	return fmt.Sprintf("/temp-images/%s", filename), nil
 }

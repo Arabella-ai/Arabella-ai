@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,19 +133,33 @@ func (h *UploadHandler) UploadImage(c *gin.Context) {
 	}
 
 	// Return the URL to access the uploaded file
-	// Use the server base URL from config or construct from request
+	// Use the Origin header (frontend domain) or construct from request
 	baseURL := c.GetHeader("Origin")
 	if baseURL == "" {
-		// Fallback to constructing from request
-		scheme := "https"
-		if c.GetHeader("X-Forwarded-Proto") == "http" || c.Request.TLS == nil {
-			scheme = "http"
+		// Fallback: try Referer header
+		referer := c.GetHeader("Referer")
+		if referer != "" {
+			parsedReferer, err := url.Parse(referer)
+			if err == nil {
+				baseURL = fmt.Sprintf("%s://%s", parsedReferer.Scheme, parsedReferer.Host)
+			}
 		}
-		host := c.GetHeader("Host")
-		if host == "" {
-			host = c.Request.Host
+		// Final fallback: construct from request
+		if baseURL == "" {
+			scheme := "https"
+			if c.GetHeader("X-Forwarded-Proto") == "http" || c.Request.TLS == nil {
+				scheme = "http"
+			}
+			host := c.GetHeader("Host")
+			if host == "" {
+				host = c.Request.Host
+			}
+			// If host is api.arabella.uz, use arabella.uz instead (frontend domain)
+			if strings.Contains(host, "api.arabella.uz") {
+				host = strings.Replace(host, "api.arabella.uz", "arabella.uz", 1)
+			}
+			baseURL = fmt.Sprintf("%s://%s", scheme, host)
 		}
-		baseURL = fmt.Sprintf("%s://%s", scheme, host)
 	}
 
 	// Remove trailing slash
