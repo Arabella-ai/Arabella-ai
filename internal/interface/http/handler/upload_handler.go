@@ -57,11 +57,11 @@ func (h *UploadHandler) UploadImage(c *gin.Context) {
 
 	// Validate file type
 	allowedTypes := map[string]bool{
-		"image/jpeg":      true,
-		"image/jpg":       true,
-		"image/png":       true,
-		"image/gif":       true,
-		"image/webp":      true,
+		"image/jpeg":               true,
+		"image/jpg":                true,
+		"image/png":                true,
+		"image/gif":                true,
+		"image/webp":               true,
 		"application/octet-stream": true, // Some browsers send this
 	}
 
@@ -125,8 +125,8 @@ func (h *UploadHandler) UploadImage(c *gin.Context) {
 	if err != nil || fileInfo.Size() == 0 {
 		os.Remove(filePath) // Clean up
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error:   "Failed to verify uploaded file",
-			Code:    "INTERNAL_ERROR",
+			Error: "Failed to verify uploaded file",
+			Code:  "INTERNAL_ERROR",
 		})
 		return
 	}
@@ -153,9 +153,9 @@ func (h *UploadHandler) UploadImage(c *gin.Context) {
 	imageURL := fmt.Sprintf("%s/uploads/%s", baseURL, filename)
 
 	c.JSON(http.StatusOK, gin.H{
-		"url":      imageURL,
-		"filename": filename,
-		"size":     fileInfo.Size(),
+		"url":         imageURL,
+		"filename":    filename,
+		"size":        fileInfo.Size(),
 		"uploaded_at": time.Now().UTC().Format(time.RFC3339),
 	})
 }
